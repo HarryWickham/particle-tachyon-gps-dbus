@@ -55,6 +55,6 @@ jobs:
         uses: docker/build-push-action@v6.18.0
         with:
           push: true
-          tags: 
-            - ghcr.io/harrywickham/particle-tachyon-gps-dbus:latest
-            - ghcr.io/harrywickham/particle-tachyon-gps-dbus:${{ github.sha }}
+          tags: |
+             ghcr.io/harrywickham/particle-tachyon-gps-dbus:latest
+             ghcr.io/harrywickham/particle-tachyon-gps-dbus:${{ github.sha }}
