@@ -7,6 +7,7 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
+// ParseFloatVariant converts a D-Bus variant to a float64 value
 func ParseFloatVariant(v dbus.Variant) (float64, error) {
 	switch val := v.Value().(type) {
 	case float64:
@@ -20,6 +21,7 @@ func ParseFloatVariant(v dbus.Variant) (float64, error) {
 	}
 }
 
+// ToInt8 converts various numeric types to int8
 func ToInt8(val any) int8 {
 	switch v := val.(type) {
 	case int8:
@@ -39,6 +41,7 @@ func ToInt8(val any) int8 {
 	}
 }
 
+// ToInt32 converts various numeric types to int32
 func ToInt32(val any) int32 {
 	switch v := val.(type) {
 	case int8:
@@ -58,6 +61,7 @@ func ToInt32(val any) int32 {
 	}
 }
 
+// ToUint8 converts various numeric types to uint8
 func ToUint8(val any) uint8 {
 	switch v := val.(type) {
 	case int8:

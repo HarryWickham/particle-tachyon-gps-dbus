@@ -1,18 +1,26 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/godbus/dbus/v5"
+)
+
+const (
+	// MaxSatelliteCount defines the maximum number of satellites that can be tracked
+	MaxSatelliteCount = 12
 )
 
 func init() {
@@ -22,20 +30,50 @@ func init() {
 	}
 }
 
-func getEnv(key string) string {
+// getEnv retrieves an environment variable value and returns an error if it's missing
+func getEnv(key string) (string, error) {
 	val := os.Getenv(key)
 	if val == "" {
-		log.Fatalf("Missing required environment variable: %s", key)
+		return "", fmt.Errorf("missing required environment variable: %s", key)
 	}
-	return val
+	return val, nil
 }
 
 func main() {
-	mqttBrokerPort := getEnv("MQTT_BROKER_PORT")
-	mqttBrokerURL := getEnv("MQTT_BROKER_URL")
-	mqttTopic := getEnv("MQTT_TOPIC")
-	mqttUsername := getEnv("MQTT_USERNAME")
-	mqttPassword := getEnv("MQTT_PASSWORD")
+	// Set up graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle OS signals for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		log.Println("Received shutdown signal, gracefully shutting down...")
+		cancel()
+	}()
+
+	// Load environment variables with error handling
+	mqttBrokerPort, err := getEnv("MQTT_BROKER_PORT")
+	if err != nil {
+		log.Fatalf("Environment setup failed: %v", err)
+	}
+	mqttBrokerURL, err := getEnv("MQTT_BROKER_URL")
+	if err != nil {
+		log.Fatalf("Environment setup failed: %v", err)
+	}
+	mqttTopic, err := getEnv("MQTT_TOPIC")
+	if err != nil {
+		log.Fatalf("Environment setup failed: %v", err)
+	}
+	mqttUsername, err := getEnv("MQTT_USERNAME")
+	if err != nil {
+		log.Fatalf("Environment setup failed: %v", err)
+	}
+	mqttPassword, err := getEnv("MQTT_PASSWORD")
+	if err != nil {
+		log.Fatalf("Environment setup failed: %v", err)
+	}
 
 	rootCAs, err := x509.SystemCertPool()
 	if err != nil {
@@ -59,17 +97,28 @@ func main() {
 		log.Fatalf("Failed to connect to D-Bus: %v", err)
 	}
 
+	// Main processing loop with graceful shutdown support
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
 	for {
-		data, err := getGnssData(conn)
-		if err != nil {
-			log.Printf("Failed to get GNSS data: %v", err)
-		}
-		if data != nil {
-			payload, err := json.Marshal(data)
+		select {
+		case <-ctx.Done():
+			log.Println("Shutting down gracefully...")
+			client.Disconnect(250) // Wait up to 250ms for clean disconnect
+			return
+		case <-ticker.C:
+			data, err := getGnssData(conn)
 			if err != nil {
-				log.Printf("Failed to marshal GNSS data: %v", err)
+				log.Printf("Failed to get GNSS data: %v", err)
+				continue
 			}
-			if err == nil {
+			if data != nil {
+				payload, err := json.Marshal(data)
+				if err != nil {
+					log.Printf("Failed to marshal GNSS data: %v", err)
+					continue
+				}
 				token := client.Publish(fmt.Sprintf("%s/gnss", mqttTopic), 0, false, payload)
 				token.Wait()
 				if token.Error() != nil {
@@ -79,73 +128,78 @@ func main() {
 				}
 			}
 		}
-		time.Sleep(10 * time.Second)
 	}
 }
 
+// NmeaSatelliteMsg represents NMEA satellite message data
 type NmeaSatelliteMsg struct {
-	Num    int8
-	Eledeg int8
-	Azideg int32
-	SN     int8
+	Num    int8  // Satellite number
+	Eledeg int8  // Elevation in degrees
+	Azideg int32 // Azimuth in degrees
+	SN     int8  // Signal-to-noise ratio
 }
 
+// BeidouNmeaSatelliteMsg represents Beidou NMEA satellite message data
 type BeidouNmeaSatelliteMsg struct {
-	BeidouNum    int8
-	BeidouEledeg int8
-	BeidouAzideg int32
-	BeidouSN     int8
+	BeidouNum    int8  // Beidou satellite number
+	BeidouEledeg int8  // Beidou elevation in degrees
+	BeidouAzideg int32 // Beidou azimuth in degrees
+	BeidouSN     int8  // Beidou signal-to-noise ratio
 }
 
+// NmeaUtcTime represents UTC time information from NMEA data
 type NmeaUtcTime struct {
-	Year  int32
-	Month int8
-	Date  int8
-	Hour  int8
-	Min   int8
-	Sec   int8
+	Year  int32 // Year
+	Month int8  // Month (1-12)
+	Date  int8  // Day of month (1-31)
+	Hour  int8  // Hour (0-23)
+	Min   int8  // Minutes (0-59)
+	Sec   int8  // Seconds (0-59)
 }
 
+// GnssFullData represents complete GNSS data retrieved from the D-Bus interface
 type GnssFullData struct {
-	Valid          int32
-	LastLockTimeMs uint64
-	Svnum          uint8
-	BeidouSvnum    uint8
-	NSHemi         string
-	EWHemi         string
-	Latitude       float64
-	Longitude      float64
-	Gpssta         uint8
-	Posslnum       uint8
-	Fixmode        uint8
-	Pdop           float64
-	Hdop           float64
-	Vdop           float64
-	Altitude       float64
-	Speed          float64
-	Utc            NmeaUtcTime
-	Slmsg          [12]NmeaSatelliteMsg
-	BeidouSlmsg    [12]BeidouNmeaSatelliteMsg
-	Possl          [12]uint8
+	Valid          int32                                     // Validity flag for GPS data
+	LastLockTimeMs uint64                                    // Last GPS lock time in milliseconds
+	Svnum          uint8                                     // Number of satellites in view
+	BeidouSvnum    uint8                                     // Number of Beidou satellites in view
+	NSHemi         string                                    // North/South hemisphere indicator
+	EWHemi         string                                    // East/West hemisphere indicator
+	Latitude       float64                                   // Latitude coordinate
+	Longitude      float64                                   // Longitude coordinate
+	Gpssta         uint8                                     // GPS status
+	Posslnum       uint8                                     // Position solution number
+	Fixmode        uint8                                     // GPS fix mode
+	Pdop           float64                                   // Position dilution of precision
+	Hdop           float64                                   // Horizontal dilution of precision
+	Vdop           float64                                   // Vertical dilution of precision
+	Altitude       float64                                   // Altitude above sea level
+	Speed          float64                                   // Ground speed
+	Utc            NmeaUtcTime                               // UTC time information
+	Slmsg          [MaxSatelliteCount]NmeaSatelliteMsg       // Satellite message data
+	BeidouSlmsg    [MaxSatelliteCount]BeidouNmeaSatelliteMsg // Beidou satellite message data
+	Possl          [MaxSatelliteCount]uint8                  // Position solution levels
 }
 
+// GnssData represents simplified GNSS data for publishing
 type GnssData struct {
-	Latitude       float64
-	Longitude      float64
-	Speed          float64
-	Valid          int32
-	LastLockTimeMs uint64
-	Svnum          uint8
-	BeidouSvnum    uint8
-	NSHemi         string
-	EWHemi         string
-	Altitude       float64
-	Utc            NmeaUtcTime
-	Slmsg          [12]NmeaSatelliteMsg
-	BeidouSlmsg    [12]BeidouNmeaSatelliteMsg
-	Possl          [12]uint8
+	Latitude       float64                                   // Latitude coordinate
+	Longitude      float64                                   // Longitude coordinate
+	Speed          float64                                   // Ground speed
+	Valid          int32                                     // Validity flag for GPS data
+	LastLockTimeMs uint64                                    // Last GPS lock time in milliseconds
+	Svnum          uint8                                     // Number of satellites in view
+	BeidouSvnum    uint8                                     // Number of Beidou satellites in view
+	NSHemi         string                                    // North/South hemisphere indicator
+	EWHemi         string                                    // East/West hemisphere indicator
+	Altitude       float64                                   // Altitude above sea level
+	Utc            NmeaUtcTime                               // UTC time information
+	Slmsg          [MaxSatelliteCount]NmeaSatelliteMsg       // Satellite message data
+	BeidouSlmsg    [MaxSatelliteCount]BeidouNmeaSatelliteMsg // Beidou satellite message data
+	Possl          [MaxSatelliteCount]uint8                  // Position solution levels
 }
 
+// getGnssData retrieves GNSS data from the D-Bus interface and returns it as GnssFullData
 func getGnssData(conn *dbus.Conn) (*GnssFullData, error) {
 	obj := conn.Object("io.particle.tachyon.GNSS", "/io/particle/tachyon/GNSS/Modem")
 	var result map[string]dbus.Variant
@@ -216,7 +270,7 @@ func getGnssData(conn *dbus.Conn) (*GnssFullData, error) {
 	// Satellite arrays
 	if v, ok := result["slmsg"]; ok {
 		if arr, ok := v.Value().([][]any); ok {
-			for i := 0; i < len(arr) && i < 12; i++ {
+			for i := 0; i < len(arr) && i < MaxSatelliteCount; i++ {
 				if len(arr[i]) == 4 {
 					data.Slmsg[i].Num = ToInt8(arr[i][0])
 					data.Slmsg[i].Eledeg = ToInt8(arr[i][1])
@@ -228,7 +282,7 @@ func getGnssData(conn *dbus.Conn) (*GnssFullData, error) {
 	}
 	if v, ok := result["beidou_slmsg"]; ok {
 		if arr, ok := v.Value().([][]any); ok {
-			for i := 0; i < len(arr) && i < 12; i++ {
+			for i := 0; i < len(arr) && i < MaxSatelliteCount; i++ {
 				if len(arr[i]) == 4 {
 					data.BeidouSlmsg[i].BeidouNum = ToInt8(arr[i][0])
 					data.BeidouSlmsg[i].BeidouEledeg = ToInt8(arr[i][1])
@@ -240,7 +294,7 @@ func getGnssData(conn *dbus.Conn) (*GnssFullData, error) {
 	}
 	if v, ok := result["possl"]; ok {
 		if arr, ok := v.Value().([]any); ok {
-			for i := 0; i < len(arr) && i < 12; i++ {
+			for i := 0; i < len(arr) && i < MaxSatelliteCount; i++ {
 				data.Possl[i] = ToUint8(arr[i])
 			}
 		}
