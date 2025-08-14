@@ -11,3 +11,6 @@ Use the docker-compose for simple startup.
 - `MQTT_TOPIC`
 - `MQTT_USERNAME`
 - `MQTT_PASSWORD`
+
+## Docker image:
+
