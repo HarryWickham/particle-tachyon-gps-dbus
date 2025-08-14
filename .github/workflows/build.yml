@@ -56,5 +56,5 @@ jobs:
         with:
           push: true
           tags: 
-            ghcr.io/harrywickham/particle-tachyon-gps-dbus:latest
-            ghcr.io/harrywickham/particle-tachyon-gps-dbus:${{ github.sha }}
+            - ghcr.io/harrywickham/particle-tachyon-gps-dbus:latest
+            - ghcr.io/harrywickham/particle-tachyon-gps-dbus:${{ github.sha }}
