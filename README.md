@@ -2,7 +2,7 @@
 
 Main GNSS reader logic is implemented in [`gnss_dbus.go`](./gnss_dbus.go). This requies access to `/var/run/dbus/system_bus_socket` on the Tachyon.
 
-Use the docker-compose for simple startup.
+Use the docker-compose for simple startup, demo [here](./docker-compose.yml)
 
 ## Environment variables:
 
@@ -14,3 +14,6 @@ Use the docker-compose for simple startup.
 
 ## Docker image:
 
+[ghcr.io/harrywickham/particle-tachyon-gps-dbus](https://github.com/HarryWickham/particle-tachyon-gps-dbus/pkgs/container/particle-tachyon-gps-dbus)
+
+For arm64. Demo compose file [here](./production.docker-compose.yml)

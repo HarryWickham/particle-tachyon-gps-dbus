@@ -1,0 +1,12 @@
+services:
+  particle-tachyon-gps-dbus:
+    image: ghcr.io/harrywickham/particle-tachyon-gps-dbus:latest
+    environment:
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT}
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+      - MQTT_TOPIC=${MQTT_TOPIC}
+      - MQTT_USERNAME=${MQTT_USERNAME}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+    volumes:
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
+    restart: always
