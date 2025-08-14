@@ -1,0 +1,60 @@
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5.0.0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5.5.0
+      with:
+        go-version: '1.24.6'
+      
+    - name: Build
+      run: go build -v ./...
+      
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5.0.0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5.5.0
+      with:
+        go-version: '1.24.6'
+      
+    - name: Golangci-lint
+      uses: golangci/golangci-lint-action@v8.0.0
+
+  build_container_and_publish:
+    needs: [build, lint]
+    if: ${{ needs.build.result == 'success' }} && ${{ needs.lint.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3.5.0
+        with:
+          registry: ghcr.io
+          username: harrywickham
+          password: ${{ secrets.GHCR }}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.6.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.11.1
+      - name: Build and push
+        uses: docker/build-push-action@v6.18.0
+        with:
+          push: true
+          tags: 
+            ghcr.io/harrywickham/particle-tachyon-gps-dbus:latest
+            ghcr.io/harrywickham/particle-tachyon-gps-dbus:${{ github.sha }}
