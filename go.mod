@@ -1,4 +1,4 @@
-module harrywickham/particle-gps-dbus
+module github.com/HarryWickham/particle-tachyon-gps-dbus
 
 go 1.24.6
 
