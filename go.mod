@@ -4,7 +4,7 @@ go 1.25.1
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
-	github.com/godbus/dbus/v5 v5.2.1
+	github.com/godbus/dbus/v5 v5.2.2
 )
 
 require golang.org/x/sys v0.36.0 // indirect
