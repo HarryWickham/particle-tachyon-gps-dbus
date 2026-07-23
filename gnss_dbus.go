@@ -66,9 +66,9 @@ type GnssFullData struct {
 	Speed          float64                                   // Ground speed
 	Utc            NmeaUtcTime                               // UTC time information
 	GpsUnixTime    int64                                     // GPS signal time as a Unix timestamp (seconds); 0 when no fix
-	Slmsg          [MaxSatelliteCount]NmeaSatelliteMsg       // Satellite message data
-	BeidouSlmsg    [MaxSatelliteCount]BeidouNmeaSatelliteMsg // Beidou satellite message data
-	Possl          [MaxSatelliteCount]uint8                  // Position solution levels
+	Slmsg          [MaxSatelliteCount]NmeaSatelliteMsg       `json:"-"` // Satellite message data (not published)
+	BeidouSlmsg    [MaxSatelliteCount]BeidouNmeaSatelliteMsg `json:"-"` // Beidou satellite message data (not published)
+	Possl          [MaxSatelliteCount]uint8                  `json:"-"` // Position solution levels (not published)
 }
 
 type GNSSDbus struct {
