@@ -120,7 +120,7 @@ func main() {
 					continue
 				}
 				token := client.Publish(fmt.Sprintf("%s/gnss", mqttTopic), 0, false, payload)
-				token.Wait()
+				token.WaitTimeout(5 * time.Second)
 				if token.Error() != nil {
 					log.Printf("Failed to publish GNSS data: %v", token.Error())
 				} else {

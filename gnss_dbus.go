@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -32,6 +33,19 @@ type NmeaUtcTime struct {
 	Sec   int8  // Seconds (0-59)
 }
 
+// UnixTime converts the GNSS UTC time to a Unix timestamp (seconds since the
+// epoch). It returns 0 when the time is not populated (e.g. no GPS fix), which
+// is indicated by a zero year.
+func (u NmeaUtcTime) UnixTime() int64 {
+	if u.Year == 0 {
+		return 0
+	}
+	return time.Date(
+		int(u.Year), time.Month(u.Month), int(u.Date),
+		int(u.Hour), int(u.Min), int(u.Sec), 0, time.UTC,
+	).Unix()
+}
+
 // GnssFullData represents complete GNSS data retrieved from the D-Bus interface
 type GnssFullData struct {
 	Valid          int32                                     // Validity flag for GPS data
@@ -51,24 +65,7 @@ type GnssFullData struct {
 	Altitude       float64                                   // Altitude above sea level
 	Speed          float64                                   // Ground speed
 	Utc            NmeaUtcTime                               // UTC time information
-	Slmsg          [MaxSatelliteCount]NmeaSatelliteMsg       // Satellite message data
-	BeidouSlmsg    [MaxSatelliteCount]BeidouNmeaSatelliteMsg // Beidou satellite message data
-	Possl          [MaxSatelliteCount]uint8                  // Position solution levels
-}
-
-// GnssData represents simplified GNSS data for publishing
-type GnssData struct {
-	Latitude       float64                                   // Latitude coordinate
-	Longitude      float64                                   // Longitude coordinate
-	Speed          float64                                   // Ground speed
-	Valid          int32                                     // Validity flag for GPS data
-	LastLockTimeMs uint64                                    // Last GPS lock time in milliseconds
-	Svnum          uint8                                     // Number of satellites in view
-	BeidouSvnum    uint8                                     // Number of Beidou satellites in view
-	NSHemi         string                                    // North/South hemisphere indicator
-	EWHemi         string                                    // East/West hemisphere indicator
-	Altitude       float64                                   // Altitude above sea level
-	Utc            NmeaUtcTime                               // UTC time information
+	GpsUnixTime    int64                                     // GPS signal time as a Unix timestamp (seconds); 0 when no fix
 	Slmsg          [MaxSatelliteCount]NmeaSatelliteMsg       // Satellite message data
 	BeidouSlmsg    [MaxSatelliteCount]BeidouNmeaSatelliteMsg // Beidou satellite message data
 	Possl          [MaxSatelliteCount]uint8                  // Position solution levels
@@ -159,6 +156,8 @@ func (g *GNSSDbus) GetData() (*GnssFullData, error) {
 			data.Utc.Sec = ToInt8(utcArr[5])
 		}
 	}
+	// Derive a Unix timestamp from the GPS signal's UTC time.
+	data.GpsUnixTime = data.Utc.UnixTime()
 	// Satellite arrays
 	if v, ok := result["slmsg"]; ok {
 		if arr, ok := v.Value().([][]any); ok {
